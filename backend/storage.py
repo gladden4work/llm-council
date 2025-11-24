@@ -3,7 +3,7 @@
 import json
 import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
 from .config import DATA_DIR
 
@@ -107,13 +107,13 @@ def list_conversations() -> List[Dict[str, Any]]:
     return conversations
 
 
-def add_user_message(conversation_id: str, content: str):
+def add_user_message(conversation_id: str, content: Union[str, List[Dict[str, Any]]]):
     """
     Add a user message to a conversation.
 
     Args:
         conversation_id: Conversation identifier
-        content: User message content
+        content: User message content (can be string or list for multimodal)
     """
     conversation = get_conversation(conversation_id)
     if conversation is None:

@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 import uuid
 import json
 import asyncio
@@ -31,7 +31,7 @@ class CreateConversationRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     """Request to send a message in a conversation."""
-    content: str
+    content: Union[str, List[Dict[str, Any]]]  # Supports text-only or multimodal (text + images)
 
 
 class ConversationMetadata(BaseModel):

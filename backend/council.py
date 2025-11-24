@@ -1,21 +1,58 @@
 """3-stage LLM Council orchestration."""
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Union
 from .openrouter import query_models_parallel, query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
 
 
-async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
+def _format_user_content(user_query: Union[str, List[Dict[str, Any]]]) -> Union[str, List[Dict[str, Any]]]:
+    """
+    Helper to ensure user_query is in the correct format.
+    If it's a string, return as-is. If it's a list (multimodal), return as-is.
+
+    Args:
+        user_query: User's query (string or multimodal list)
+
+    Returns:
+        The query in the appropriate format for OpenRouter API
+    """
+    return user_query
+
+
+def _extract_text_from_content(content: Union[str, List[Dict[str, Any]]]) -> str:
+    """
+    Extract text content from either a string or multimodal content list.
+    Used for generating titles and text-based prompts.
+
+    Args:
+        content: User message content (string or multimodal list)
+
+    Returns:
+        Extracted text string
+    """
+    if isinstance(content, str):
+        return content
+
+    # Extract text from multimodal content
+    text_parts = []
+    for item in content:
+        if item.get("type") == "text":
+            text_parts.append(item.get("text", ""))
+
+    return " ".join(text_parts)
+
+
+async def stage1_collect_responses(user_query: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
 
     Args:
-        user_query: The user's question
+        user_query: The user's question (string or multimodal list)
 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
-    messages = [{"role": "user", "content": user_query}]
+    messages = [{"role": "user", "content": _format_user_content(user_query)}]
 
     # Query all models in parallel
     responses = await query_models_parallel(COUNCIL_MODELS, messages)
@@ -33,19 +70,22 @@ async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
 
 
 async def stage2_collect_rankings(
-    user_query: str,
+    user_query: Union[str, List[Dict[str, Any]]],
     stage1_results: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Stage 2: Each model ranks the anonymized responses.
 
     Args:
-        user_query: The original user query
+        user_query: The original user query (string or multimodal list)
         stage1_results: Results from Stage 1
 
     Returns:
         Tuple of (rankings list, label_to_model mapping)
     """
+    # Extract text from user query for the prompt
+    user_query_text = _extract_text_from_content(user_query)
+
     # Create anonymized labels for responses (Response A, Response B, etc.)
     labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
 
@@ -63,7 +103,7 @@ async def stage2_collect_rankings(
 
     ranking_prompt = f"""You are evaluating different responses to the following question:
 
-Question: {user_query}
+Question: {user_query_text}
 
 Here are the responses from different models (anonymized):
 
@@ -113,7 +153,7 @@ Now provide your evaluation and ranking:"""
 
 
 async def stage3_synthesize_final(
-    user_query: str,
+    user_query: Union[str, List[Dict[str, Any]]],
     stage1_results: List[Dict[str, Any]],
     stage2_results: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -121,13 +161,16 @@ async def stage3_synthesize_final(
     Stage 3: Chairman synthesizes final response.
 
     Args:
-        user_query: The original user query
+        user_query: The original user query (string or multimodal list)
         stage1_results: Individual model responses from Stage 1
         stage2_results: Rankings from Stage 2
 
     Returns:
         Dict with 'model' and 'response' keys
     """
+    # Extract text from user query for the prompt
+    user_query_text = _extract_text_from_content(user_query)
+
     # Build comprehensive context for chairman
     stage1_text = "\n\n".join([
         f"Model: {result['model']}\nResponse: {result['response']}"
@@ -141,7 +184,7 @@ async def stage3_synthesize_final(
 
     chairman_prompt = f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
 
-Original Question: {user_query}
+Original Question: {user_query_text}
 
 STAGE 1 - Individual Responses:
 {stage1_text}
@@ -255,20 +298,23 @@ def calculate_aggregate_rankings(
     return aggregate
 
 
-async def generate_conversation_title(user_query: str) -> str:
+async def generate_conversation_title(user_query: Union[str, List[Dict[str, Any]]]) -> str:
     """
     Generate a short title for a conversation based on the first user message.
 
     Args:
-        user_query: The first user message
+        user_query: The first user message (string or multimodal list)
 
     Returns:
         A short title (3-5 words)
     """
+    # Extract text from user query
+    user_query_text = _extract_text_from_content(user_query)
+
     title_prompt = f"""Generate a very short title (3-5 words maximum) that summarizes the following question.
 The title should be concise and descriptive. Do not use quotes or punctuation in the title.
 
-Question: {user_query}
+Question: {user_query_text}
 
 Title:"""
 
@@ -293,12 +339,12 @@ Title:"""
     return title
 
 
-async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(user_query: Union[str, List[Dict[str, Any]]]) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
 
     Args:
-        user_query: The user's question
+        user_query: The user's question (string or multimodal list)
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
