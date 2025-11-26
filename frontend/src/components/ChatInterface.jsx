@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
@@ -114,7 +115,7 @@ export default function ChatInterface({
                   <div className="message-content">
                     {typeof msg.content === 'string' ? (
                       <div className="markdown-content">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
                       <div className="multimodal-content">
@@ -122,7 +123,7 @@ export default function ChatInterface({
                           if (item.type === 'text') {
                             return (
                               <div key={idx} className="markdown-content">
-                                <ReactMarkdown>{item.text}</ReactMarkdown>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
                               </div>
                             );
                           } else if (item.type === 'image_url') {
